@@ -1,0 +1,3 @@
+# MANIFEST.in
+recursive-include analyticcisprop/spc *.txt
+recursive-include Formule *.wl
