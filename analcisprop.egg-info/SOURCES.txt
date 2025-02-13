@@ -2,14 +2,8 @@ MANIFEST.in
 README.md
 setup.cfg
 setup.py
-Formule/condnewin.wl
-Formule/heqvarold2.wl
-Formule/keqvarold2.wl
-Formule/peqvarold2.wl
-Formule/qeqvarold2.wl
-Formule/sostfreq2.wl
-Formule/sostsolnew.wl
 analcisprop/__init__.py
+analcisprop/constants.py
 analcisprop.egg-info/PKG-INFO
 analcisprop.egg-info/SOURCES.txt
 analcisprop.egg-info/dependency_links.txt
@@ -17,3 +11,6 @@ analcisprop.egg-info/top_level.txt
 analcisprop/propagators/__init__.py
 analcisprop/propagators/cartesian_propagator.py
 analcisprop/propagators/secular_propagator.py
+analcisprop/spc/__init__.py
+analcisprop/spc/external/__init__.py
+analcisprop/spc/internal/__init__.py
