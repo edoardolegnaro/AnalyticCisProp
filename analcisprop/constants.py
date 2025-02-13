@@ -12,28 +12,28 @@ lambda_moon = 0.229968
 
 wE1 = 2.286e-6 * day
 wE2 = 2.6392e-6 * day
-wE3 = 4.9262e-6 * day
+wE3 = 4.9252e-6 * day
 wE4 = 5.34481e-6 * day
-wE5 = 5.31161e-6 * day
+wE5 = 1.99097e-7 * day
 wE6 = 2.6724e-6 * day
 wE7 = 3.32011e-8 * day
 wE8 = 2.2528e-6 * day
 
 # Earth Position Vector
-AxV = [731, 14797, 1369, -1286]
-BxV = [3836, 14794, -2010, 148]
+AxV = [730.56, 14796.88, 1369.26, -1285.72]
+BxV = [3836.11, 14794.17, -2010.23, 148.03]
 wxV = [wE1, wE2, wE3, wE4]
 
-AyV = [8407, 29774, -3263, 148]
-ByV = [-1596, -29750, -2224, 1288]
-wyV = [wE1, wE2, wE3, wE4]
+AyV = [60.59, 8406.78, 29773.72, -3262.64, 148.26]
+ByV = [-1403.61, -1596.08, -29749.79, -2223.9, 1287.76]
+wyV = [wE5, wE1, wE2, wE3, wE4]
 
-AzV = [-2579, -826, -44649, 920]
-BzV = [2896, 1073, 2555, 821]
-wzV = [wE7, wE8, wE6, wE5]
+AzV = [-2579.36, -825.59, -44649.42]
+BzV = [2895.76, 1073.41, 2554.55]
+wzV = [wE7, wE8, wE6]
 
 def earth_position(t):
-    xE = 382470. + np.sum([AxV[j] * np.cos(wxV[j] * t) + BxV[j] * np.sin(wxV[j] * t) for j in range(len(AxV))], axis=0)
+    xE = 382469.63 + np.sum([AxV[j] * np.cos(wxV[j] * t) + BxV[j] * np.sin(wxV[j] * t) for j in range(len(AxV))], axis=0)
     yE = np.sum([AyV[j] * np.cos(wyV[j] * t) + ByV[j] * np.sin(wyV[j] * t) for j in range(len(AyV))], axis=0)
     zE = np.sum([AzV[j] * np.cos(wzV[j] * t) + BzV[j] * np.sin(wzV[j] * t) for j in range(len(AzV))], axis=0)
 
