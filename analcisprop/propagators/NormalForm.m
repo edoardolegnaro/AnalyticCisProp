@@ -1,3 +1,29 @@
+(* ::Package:: *)
+
+ToNUMPY[IN_]:=Module[{expr},
+	expr = StringReplace[ToString[InputForm[IN]],{"*^"->"e"}];
+	StringReplace[expr,{"Cos"->"np.cos","ArcSin"->"np.arcsin", "Sin"->"np.sin","Sqrt"->"np.sqrt","["->"(","]"->")","/"->"/","^"->"**","*"->"*"}]
+]
+
+AnalyticSol[akm_,ecc0_,inc0_,OM0_,om0_,M0_]:=Module[{lw0, h0, k0,q0, p0, lM0, orbnfanal},
+	lw0 = om0 + OM0;
+	h0 = ecc0 Cos[lw0]; 
+	k0 = ecc0 Sin[lw0];
+	q0 = Sin[inc0 /2] Cos[OM0];
+	p0 = Sin[inc0 /2] Sin[OM0];
+	lM0 = lw0 + M0;
+	
+	orbnfanal=Computemeanelementstime[akm,lM0,ecc0,lw0,inc0,OM0,0.0];
+	orbnfanal
+]
+
+AnalyticEccInc[akm_,ecc0_,inc0_,OM0_,om0_,M0_]:=Module[{orbnfanal, eanal, ianal},
+	orbnfanal = AnalyticSol[akm,ecc0,inc0,OM0,om0,M0];
+	eanal = Sqrt[(heq/.orbnfanal)^2+(keq/.orbnfanal)^2];
+	ianal =  2*ArcSin[Sqrt[(qeq/.orbnfanal)^2+(peq/.orbnfanal)^2]];
+	{ToNUMPY@eanal, ToNUMPY@ianal}
+]
+
 ComputeCorrectionssimp[anum_, lM_, heq_, keq_, qeq_, peq_, t_] := 
     Module[{nnum, enum, etanum, sihnum, cihnum, lwnum, hnum, u1num, u2num, 
       u3num, u4num, omelw0num, omeh0num, domelwdLamnum, domehdLamnum, 
@@ -36,21 +62,13 @@ ComputeCorrectionssimp[anum_, lM_, heq_, keq_, qeq_, peq_, t_] :=
           divisornum /. domenum}; correctionlis]
  
 gmlnum = 3.68508*^13
- 
 u10num = -1.1275185630435716
- 
 ome1num = 0.229968
- 
 u20num = -0.34221198139102316
- 
 ome2num = 0.0019443
- 
 u30num = -2.7556294945155315
- 
 ome3num = -0.000924193
- 
 u40num = 1.5276558480999978
- 
 ome4num = 0.017202
  
 lwdot0numsimp = -0.229968 + (eta*(0.03892201271356557 - 

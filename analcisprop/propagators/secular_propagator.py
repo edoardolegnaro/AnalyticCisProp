@@ -1,6 +1,7 @@
 import heyoka as hk
 from analcisprop.constants import AxV, BxV, wxV, AyV, ByV, wyV, AzV, BzV, wzV, GME, GML
 import time
+import numpy as np
 
 L, G, H, g, h, l =  hk.make_vars("L", "G", "H", "g", "h", "l")
 I1, I2, I3, I4 =  hk.make_vars("I1", "I2", "I3", "I4")
