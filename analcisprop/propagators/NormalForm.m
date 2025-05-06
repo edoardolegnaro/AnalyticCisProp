@@ -2,7 +2,7 @@
 
 ToNUMPY[IN_]:=Module[{expr},
 	expr = StringReplace[ToString[InputForm[IN]],{"*^"->"e"}];
-	StringReplace[expr,{"Cos"->"np.cos","ArcSin"->"np.arcsin", "Sin"->"np.sin","Sqrt"->"np.sqrt","["->"(","]"->")","/"->"/","^"->"**","*"->"*"}]
+	StringReplace[expr,{"Cos"->"np.cos","ArcSin"->"np.arcsin","ArcTan"->"np.arctan", "Sin"->"np.sin","\[Pi]"->"np.pi","Mod"->"np.mod","Sqrt"->"np.sqrt","["->"(","]"->")","/"->"/","^"->"**","*"->"*"}]
 ]
 
 AnalyticSol[akm_,ecc0_,inc0_,OM0_,om0_,M0_]:=Module[{lw0, h0, k0,q0, p0, lM0, orbnfanal},
@@ -23,6 +23,25 @@ AnalyticEccInc[akm_,ecc0_,inc0_,OM0_,om0_,M0_]:=Module[{orbnfanal, eanal, ianal}
 	ianal =  2*ArcSin[Sqrt[(qeq/.orbnfanal)^2+(peq/.orbnfanal)^2]];
 	{ToNUMPY@eanal, ToNUMPY@ianal}
 ]
+
+AnalyticEquinoctical[ {akm_, ecc0_, inc0_, OM0_, om0_, M0_}, {t0_, tfin_, dt_} ]:=
+  Module[{orbnfanal},
+  orbnfanal = AnalyticSol[akm,ecc0,inc0,OM0,om0,M0];
+  Table[({akm, heq, keq, qeq, peq, lM}/.orbnfanal)/.{t ->i}, {i, t0, tfin, dt}]
+  ]
+
+AnalyticKeplerian[ {akm_, ecc0_, inc0_, OM0_, om0_, M0_}, {t0_, tfin_, dt_} ]:=
+  Module[{orbnfanal, eanal, ianal, OManal, lwanal, omData, MData, aanal},
+    orbnfanal = AnalyticSol[akm,ecc0,inc0,OM0,om0,M0];
+    eanal = Sqrt[(heq/.orbnfanal)^2+(keq/.orbnfanal)^2];
+    ianal =  2*ArcSin[Sqrt[(qeq/.orbnfanal)^2+(peq/.orbnfanal)^2]];
+    OManal = Mod[ArcTan[qeq, peq]/.orbnfanal, 2 Pi];
+    lwanal = Mod[ArcTan[keq, heq]/.orbnfanal, 2 Pi];
+    omanal = Mod[lwanal - OManal, 2 Pi];
+    n = Sqrt[gmlnum/akm^3];
+    manal = Mod[((lM+n-ome1num)/.orbnfanal) - lwanal, 2 Pi];
+  Table[{akm, eanal, ianal, OManal, omanal, manal}/.{t ->i}, {i, t0, tfin, dt}]
+  ]
 
 ComputeCorrectionssimp[anum_, lM_, heq_, keq_, qeq_, peq_, t_] := 
     Module[{nnum, enum, etanum, sihnum, cihnum, lwnum, hnum, u1num, u2num, 

@@ -126,8 +126,9 @@ def par2ic( kep, mu ):
 # Keplerian elements to equinoxial.
 def kep2equinox(kep):
     a, e, i, OM, om, M = kep
-    h = e*np.cos(OM+om)
-    k = e*np.sin(OM+om)
+    lw = om + OM
+    h = e*np.cos(lw)
+    k = e*np.sin(lw)
     p = np.sin(i/2)*np.cos(OM)
     q = np.sin(i/2)*np.sin(OM)
     lM = M + OM + om
