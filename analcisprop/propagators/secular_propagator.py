@@ -1,61 +1,82 @@
-import heyoka as hk
-from analcisprop.constants import AxV, BxV, wxV, AyV, ByV, wyV, AzV, BzV, wzV, GME, GML, lambda_moon
-import time
-import os
+from analcisprop.propagators.secular_equations.dh_dt import dh_dt
+from analcisprop.propagators.secular_equations.dk_dt import dk_dt
+from analcisprop.propagators.secular_equations.dp_dt import dp_dt
+from analcisprop.propagators.secular_equations.dq_dt import dq_dt
+from analcisprop.propagators.secular_equations.dlM_dt import dlM_dt
+from analcisprop.constants import AxV, BxV, wxV, AyV, ByV, wyV, AzV, BzV, wzV, GML
 import numpy as np
+from numba import njit
+from scipy.integrate import solve_ivp
 
-a, h, k, p, q, lM = hk.make_vars("a", "h", "k", "p", "q", "lM")
-t = hk.time
-OM = hk.atan2(q, p)
-lw = hk.atan2(k, h)
-ecc = hk.sqrt(h**2 + k**2)
-eta = hk.sqrt(1 - ecc)
-sih = hk.sqrt(q**2 + p**2)
-cih = hk.sqrt(1 - sih**2)
-n = hk.sqrt(GML / a**3)
+def VF(t, y):
+    """
+    y is the state vector in equinoctical coordinates.
+    y = [a, h, k, p, q, lM]
+    """
+    akm, h, k, p, q, lM = y
+    # Earth Contribution
+    xenum_sum = 0.0
+    for j in range(len(AxV)):
+        xenum_sum += AxV[j] * np.cos(wxV[j] * t) + BxV[j] * np.sin(wxV[j] * t)
+    xenum = 382469.63 + xenum_sum
 
-xE = 382469.63+ np.sum([AxV[j] * hk.cos(wxV[j] * t) + BxV[j] * hk.sin(wxV[j] * t) for j in range(len(AxV))], axis=0)
-yE = np.sum([AyV[j] * hk.cos(wyV[j] * t) + ByV[j] * hk.sin(wyV[j] * t) for j in range(len(AyV))], axis=0)
-zE = np.sum([AzV[j] * hk.cos(wzV[j] * t) + BzV[j] * hk.sin(wzV[j] * t) for j in range(len(AzV))], axis=0)
+    yenum_sum = 0.0
+    for j in range(len(AyV)):
+        yenum_sum += AyV[j] * np.cos(wyV[j] * t) + ByV[j] * np.sin(wyV[j] * t)
+    yenum = yenum_sum
 
-rE = hk.sqrt( xE**2 + yE**2 + zE**2 )
+    zenum_sum = 0.0
+    for j in range(len(AzV)):
+        zenum_sum += AzV[j] * np.cos(wzV[j] * t) + BzV[j] * np.sin(wzV[j] * t)
+    zenum = zenum_sum
 
-current_file_path = os.path.abspath(__file__)
-current_dir_path = os.path.dirname(current_file_path)
-variables = ['hdot', 'kdot', 'lMdot', 'pdot', 'qdot']
-VF = {}
-for var in variables:
-       with open(os.path.join(current_dir_path, 'secular_equations', 'heyoka_equations', f'{var}.txt'), "r") as f:
-              VF[var] = eval(f.read())
+    renum = np.sqrt(xenum**2 + yenum**2 + zenum**2)
 
-ic0_eq = [2.03775416e+03, 9.52627774e-02, 2.95478462e-02, 9.98273644e-02,8.40936532e-02, 1.25663046e+01]
+    OM = np.arctan2(q, p)
+    lw = np.arctan2(k, h)
 
-print('Compiling the Double Averaged Taylor integrator ... (this is done only once)')
+    sih = np.sqrt(q**2 + p**2)
+    if sih * sih >= 1.0:
+        cih = 0.0
+    else:
+        cih = np.sqrt(1 - sih**2)
 
-start_time = time.time()
+    ecc_sq = h**2 + k**2
+    if ecc_sq >= 1.0:
+        eta = 0.0
+        ecc = 1.0
+    else:
+        ecc = np.sqrt(ecc_sq)
+        eta = np.sqrt(1 - ecc_sq)
 
-ta = hk.taylor_adaptive(
-    sys = [(a, a*0.0), (h, VF['hdot']), (k, VF['kdot']), 
-           (p, VF['pdot']), (q, VF['qdot']), (lM, VF['lMdot']+ n-lambda_moon)],
-    state = ic0_eq,
-    tol=1e-9,
-    compact_mode = True
-)
+    n = np.sqrt(GML / akm**3)
 
-end_time = time.time()
+    hdot = dh_dt(akm, OM, n, ecc, sih, cih, eta, lw, xenum, yenum, zenum, renum)
+    kdot = dk_dt(akm, OM, n, ecc, sih, cih, eta, lw, xenum, yenum, zenum, renum)
+    pdot = dp_dt(akm, OM, n, ecc, sih, cih, eta, lw, xenum, yenum, zenum, renum)
+    qdot = dq_dt(akm, OM, n, ecc, sih, cih, eta, lw, xenum, yenum, zenum, renum)
+    lMdot = dlM_dt(akm, OM, n, ecc, sih, cih, eta, lw, xenum, yenum, zenum, renum)
 
-print('Done, in')
-print("--- %s seconds ---" % (end_time - start_time))
+    out = np.empty(6, dtype=np.float64)
+    out[0] = 0.0
+    out[1] = hdot
+    out[2] = kdot
+    out[3] = qdot
+    out[4] = pdot
+    out[5] = lMdot
+    return out
 
-print("\nHeyoka Taylor integrator:\n", ta)
+def propagate(y0, t_span, **options):
+    """
+    Propagates the state vector y0 over the time span t_span using the VF function.
 
-print("\nTaylor order:\n", len(ta.decomposition) - 12)
+    Args:
+        y0: Initial state vector [a, h, k, p, q, lM].
+        t_span: Tuple (t_start, t_end) specifying the integration interval.
+        **options: Additional keyword arguments passed to scipy.integrate.solve_ivp.
 
-print("\n")
-
-def propagate(tmax, dt, ic):
-    ta.time = 0
-    ta.state[:] = ic
-    tgrid = np.linspace(0.0, tmax, int(1 + tmax/dt), endpoint = True)
-    out = ta.propagate_grid(tgrid)
-    return out[5]
+    Returns:
+        The solution object returned by scipy.integrate.solve_ivp.
+    """
+    sol = solve_ivp(VF, t_span, y0, **options)
+    return sol
