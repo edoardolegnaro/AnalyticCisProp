@@ -3,4 +3,4 @@ Install the package with
 ```
 pip install -e .
 ```
-Requiers the free [Wolfram Engine]([url](https://www.wolfram.com/engine/)) (or Wolfram Mathematica). 
+Requiers the free [Wolfram Engine]([url](https://www.wolfram.com/engine/)) with free [license]([url](https://www.wolfram.com/engine/free-license/)).
