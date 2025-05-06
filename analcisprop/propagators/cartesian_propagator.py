@@ -1,5 +1,6 @@
 import heyoka as hk
-from analcisprop.constants import *
+import numpy as np
+from analcisprop.constants import AxV, BxV, wxV, AyV, ByV, wyV, AzV, BzV, wzV, GME, GML
 
 
 x, y, z, px, py, pz = hk.make_vars("x", "y", "z", "px", "py", "pz")
