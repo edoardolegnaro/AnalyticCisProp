@@ -2,8 +2,21 @@ import numpy as np
 import importlib.resources as resources
 from analcisprop.constants import Cbar, Sbar, GME
 import os
+import functools
 
 spc_dir = 'spc'
+
+# Cache for loaded coefficients
+_coefficient_cache = {}
+
+@functools.lru_cache(maxsize=32)
+def load_spc_file(resource_package, resource_name):
+    """Load SPC coefficients from file with caching"""
+    with resources.open_text(resource_package, resource_name) as file:
+        if "internal" in resource_package:
+            return load_spc_internal(file)
+        else:
+            return load_spc_3b(file)
 
 def load_spc_3b(file):
     theory = []
@@ -78,118 +91,136 @@ def load_spc_internal(file):
     return internal_terms
 
 def reconstruct_3bp(coeff_list, GM3b, r3b, x3b, y3b, z3b, r, a, e, n, cih, sih, eta, etap1, h, lw, lu):
-    total_sum = 0
-
-    for cl in coeff_list:
-        cct = cl[0]
-        cr = r3b ** cl[1]
-        cx = x3b ** cl[2]
-        cy = y3b ** cl[3]
-        cz = z3b ** cl[4]
-        crs = r ** cl[5]
-        ca = a ** cl[6]
-        ce = e ** cl[7]
-        cn = n ** cl[8]
-        ccih = cih ** cl[9]
-        csih = sih ** cl[10]
-        ceta = eta ** cl[11]
-        cetap1 = etap1 ** cl[12]
-
-        # Determine whether to use cosine or sine
-        if cl[13] == 0:
-            ctrig = np.cos(cl[14] * h + cl[15] * lw + cl[16] * lu)
-        else:
-            ctrig = np.sin(cl[14] * h + cl[15] * lw + cl[16] * lu)
-
-        cterm = cct * cr * cx * cy * cz * crs * ca * ce * cn * ccih * csih * ceta * cetap1 * ctrig
-        total_sum += cterm
-
-    return total_sum * GM3b
+    """Reconstruction of 3-body perturbation terms"""
+    # Pre-compute powers that are used multiple times
+    powers = {
+        'r3b': r3b, 'x3b': x3b, 'y3b': y3b, 'z3b': z3b, 'r': r,
+        'a': a, 'e': e, 'n': n, 'cih': cih, 'sih': sih,
+        'eta': eta, 'etap1': etap1
+    }
+    
+    coeff_array = np.array(coeff_list)
+    
+    # Extract columns from coefficient array
+    ccts = coeff_array[:, 0]
+    exponents = coeff_array[:, 1:13]  # All exponents in columns 1-12
+    cos_sin_flags = coeff_array[:, 13].astype(int)
+    angle_mults = coeff_array[:, 14:17]  # Angle multipliers
+    
+    terms = ccts.copy()
+    
+    # Multiply by all power terms
+    for i, power_key in enumerate(['r3b', 'x3b', 'y3b', 'z3b', 'r', 'a', 'e', 'n', 
+                                  'cih', 'sih', 'eta', 'etap1']):
+        # Use broadcasting to compute all powers at once
+        terms *= powers[power_key] ** exponents[:, i]
+    
+    # Compute angles
+    angles = angle_mults[:, 0] * h + angle_mults[:, 1] * lw + angle_mults[:, 2] * lu
+    
+    # Apply cosine or sine based on flag
+    cos_terms = np.cos(angles)
+    sin_terms = np.sin(angles)
+    trig_terms = np.where(cos_sin_flags == 0, cos_terms, sin_terms)
+    
+    # Final multiplication and sum
+    return GM3b * np.sum(terms * trig_terms)
 
 def reconstruct_internal(coeff_list, a, e, n, cih, sih, eta, etap1, phi, RL, h, lw, lf, verse):
-    """ Compute the internal terms sum, with optional handling for J2² terms. """
-    total_sum = 0
+    """Reconstruction of internal perturbation terms"""
+    # Pre-compute common values
+    powers = {
+        'a': a, 'e': e, 'n': n, 'cih': cih, 'sih': sih,
+        'eta': eta, 'etap1': etap1, 'phi': phi, 'RL': RL
+    }
+    
+    coeff_array = np.array(coeff_list)
+    
+    # Extract all needed values as arrays
+    cs_flags = coeff_array[:, 0].astype(int)
+    n_vals = coeff_array[:, 1].astype(int)
+    m_vals = coeff_array[:, 2].astype(int)
+    coeffs = coeff_array[:, 3]
+    exponents = coeff_array[:, 4:13]  # Exponents in columns 4-12
+    trig_flags = coeff_array[:, 13].astype(int)
+    angle_mults = coeff_array[:, 14:17]  # Angle multipliers
+    
+    # Get C or S values for each term
+    ccsnm_vals = np.array([float(verse) * (
+        Cbar(n_val, m_val) if cs_flag == 0 else Sbar(n_val, m_val)
+    ) for n_val, m_val, cs_flag in zip(n_vals, m_vals, cs_flags)])
+    
+    terms = coeffs * ccsnm_vals
+    
+    # Multiply by all power terms
+    for i, power_key in enumerate(['a', 'e', 'n', 'cih', 'sih', 'eta', 'etap1', 'phi', 'RL']):
+        terms *= powers[power_key] ** exponents[:, i]
+    
+    # Compute angles
+    angles = angle_mults[:, 0] * h + angle_mults[:, 1] * lw + angle_mults[:, 2] * lf
+    
+    # Apply cosine or sine based on flag
+    cos_terms = np.cos(angles)
+    sin_terms = np.sin(angles)
+    trig_terms = np.where(trig_flags == 0, cos_terms, sin_terms)
+    
+    # Final multiplication and sum
+    return np.sum(terms * trig_terms)
 
-    for cl in coeff_list:
-        n_val, m_val = int(cl[1]), int(cl[2])  # Extract n and m
-        
-        # Choose C or S based on the flag
-        ccsnm = float(verse)*( Cbar(n_val, m_val) if cl[0] == 0 else Sbar(n_val, m_val))
-
-        cct = cl[3]
-        ca = a ** cl[4]
-        ce = e ** cl[5]
-        cn = n ** cl[6]
-        ccih = cih ** cl[7]
-        csih = sih ** cl[8]
-        ceta = eta ** cl[9]
-        cetap1 = etap1 ** cl[10]
-        cphi = phi ** cl[11]
-        crl = RL ** cl[12]
-
-        # Compute cosine or sine based on cos_sin_flag
-        if cl[13] == 0:
-            ctrig = np.cos(cl[14] * h + cl[15] * lw + cl[16] * lf)
-        else:
-            ctrig = np.sin(cl[14] * h + cl[15] * lw + cl[16] * lf)
-
-        # Compute the term
-        cterm = cct * ccsnm * ca * ce * cn * ccih * csih * ceta * cetap1 * cphi * crl * ctrig
-
-        # Sum the term
-        total_sum += cterm
-
-    return total_sum
-
-def spc_moon(var, internal_vals, type_spc, verse):
+def compute_all_corrections(internal_vals, external_vals=None, type_spc='mean2med', verse=1):
+    """Compute all corrections"""
     akm, ecc0, n, cih, sih, eta, etap1, phi, RL, OM0, lw, lf = internal_vals
-    resource_package = f"analcisprop.spc.internal.{type_spc}"
-    resource_name = f"{var}.txt"
-    path = os.path.join(spc_dir, 'internal', type_spc, f'{var}.txt')
-    with resources.open_text(resource_package, resource_name) as file:
-        cf_list = load_spc_internal(file)
-    return reconstruct_internal(cf_list, akm, ecc0, n, cih, sih, eta, etap1, phi, RL, OM0, lw, lf, verse)
-
-def spc_3b(var, external_vals, type_spc, verse):
-    rE, xE, yE, zE, r, akm, ecc0, n, cih, sih, eta, etap1, OM0, lw, lu = external_vals
-    resource_package = f"analcisprop.spc.external.P2.{type_spc}"
-    resource_name = f"{var}.txt"
-    with resources.open_text(resource_package, resource_name) as file:
-        cf_list = load_spc_3b(file)
-    return reconstruct_3bp(cf_list, verse*GME, rE, xE, yE, zE, r, akm, ecc0, n, cih, sih, eta, etap1, OM0, lw, lu)
-
+    
+    # Dictionary to store corrections
+    all_corrections = {key: 0.0 for key in keys}
+    
+    # Compute internal corrections
+    for key in keys:
+        resource_package = f"analcisprop.spc.internal.{type_spc}"
+        resource_name = f"{key}.txt"
+        
+        # Use cached coefficients if available
+        cache_key = (resource_package, resource_name)
+        if cache_key not in _coefficient_cache:
+            _coefficient_cache[cache_key] = load_spc_file(resource_package, resource_name)
+        
+        cf_list = _coefficient_cache[cache_key]
+        all_corrections[key] += reconstruct_internal(
+            cf_list, akm, ecc0, n, cih, sih, eta, etap1, phi, RL, OM0, lw, lf, verse
+        )
+    
+    # Compute external corrections if needed
+    if external_vals is not None:
+        rE, xE, yE, zE, r, akm, ecc0, n, cih, sih, eta, etap1, OM0, lw, lu = external_vals
+        
+        for key in keys:
+            resource_package = f"analcisprop.spc.external.P2.firstorder"
+            resource_name = f"{key}.txt"
+            
+            # Use cached coefficients
+            cache_key = (resource_package, resource_name)
+            if cache_key not in _coefficient_cache:
+                _coefficient_cache[cache_key] = load_spc_file(resource_package, resource_name)
+            
+            cf_list = _coefficient_cache[cache_key]
+            all_corrections[key] += reconstruct_3bp(
+                cf_list, verse*GME, rE, xE, yE, zE, r, akm, ecc0, n, cih, sih, eta, etap1, OM0, lw, lu
+            )
+    
+    return all_corrections
 
 keys = ['a', 'h', 'k', 'p', 'q', 'lM']
 
 def mean2med(mean_eq, internal_vals, verse):
-    """
-    verse = +1: Applies forward transformation (mean → medium), so when using mean2osc()
-    verse = -1: Applies inverse transformation (medium → mean), so when using osc2mean()
-    """
-    
-    corrections = {
-        key: spc_moon(key, internal_vals, 'mean2med', verse)
-        for key in keys
-        }
-    
-    return [elem + corrections[key]
-            for elem, key in zip(mean_eq, keys)]
-
+    corrections = compute_all_corrections(internal_vals, type_spc='mean2med', verse=verse)
+    return [elem + corrections[key] for elem, key in zip(mean_eq, keys)]
 
 def med2osc(med_eq, internal_vals, external_vals, verse):
-
-    internal_corr = {
-        key: spc_moon(key, internal_vals, 'med2osc', verse)
-        for key in keys
-    }
+    corrections = compute_all_corrections(
+        internal_vals, external_vals, type_spc='med2osc', verse=verse
+    )
     
-    external_corr = {
-        key: spc_3b(key, external_vals, 'firstorder', verse)
-        for key in keys
-    }
-
-    return [elem + internal_corr[key] + external_corr[key] 
-            for elem, key in zip(med_eq, keys)]
+    return [elem + corrections[key] for elem, key in zip(med_eq, keys)]
 
 
 
