@@ -1,12 +1,14 @@
+import numpy as np
+from scipy.integrate import solve_ivp
+
+from analcisprop.constants import GML, AxV, AyV, AzV, BxV, ByV, BzV, wxV, wyV, wzV
 from analcisprop.propagators.secular_equations.dh_dt import dh_dt
 from analcisprop.propagators.secular_equations.dk_dt import dk_dt
+from analcisprop.propagators.secular_equations.dlM_dt import dlM_dt
 from analcisprop.propagators.secular_equations.dp_dt import dp_dt
 from analcisprop.propagators.secular_equations.dq_dt import dq_dt
-from analcisprop.propagators.secular_equations.dlM_dt import dlM_dt
-from analcisprop.constants import AxV, BxV, wxV, AyV, ByV, wyV, AzV, BzV, wzV, GML
-import numpy as np
-from numba import njit
-from scipy.integrate import solve_ivp
+from analcisprop.utils import variable_changes as vc
+
 
 def VF(t, y):
     """
@@ -66,12 +68,70 @@ def VF(t, y):
     out[5] = lMdot
     return out
 
-def propagate(y0, t_span, **options):
+
+def propagate(kep_elements, tmax, t_eval=None, **options):
     """
-    Propagates the state vector y0 over the time span t_span using the VF function.
+    Propagates Keplerian orbital elements using the secular propagator.
 
     Args:
-        y0: Initial state vector [a, h, k, p, q, lM].
+        kep_elements: Initial Keplerian elements [a, e, i, OM, om, M] where:
+                     - a: semi-major axis (km)
+                     - e: eccentricity
+                     - i: inclination (rad)
+                     - OM: longitude of ascending node (rad)
+                     - om: argument of periapsis (rad)
+                     - M: mean anomaly (rad)
+        tmax: Maximum integration time (s)
+        t_eval: Time points at which to evaluate the solution. If None,
+                creates a grid with 1000 points from 0 to tmax.
+        **options: Additional keyword arguments passed to scipy.integrate.solve_ivp.
+
+    Returns:
+        dict: Dictionary containing:
+            - 't': Time grid (s)
+            - 'keplerian': List of Keplerian elements at each time step
+                          Each element is [a, e, i, OM, om, M]
+            - 'solution': Raw scipy solution object (in equinoctial coordinates)
+    """
+    # Convert Keplerian to equinoctial coordinates
+    ic0_eq = np.array(vc.kep2equinox(kep_elements))
+
+    # Set default solver options
+    default_options = {"method": "LSODA", "rtol": 1e-8, "atol": 1e-8}
+
+    # Update defaults with user-provided options
+    solver_options = {**default_options, **options}
+
+    # Create time grid if not provided
+    if t_eval is None:
+        t_eval = np.linspace(0, tmax, 1000)
+
+    solver_options["t_eval"] = t_eval
+
+    t_span = (0, tmax)
+
+    # Propagate in equinoctial coordinates
+    sec_sol_eq = solve_ivp(VF, t_span, ic0_eq, **solver_options)
+
+    # Convert results back to Keplerian elements
+    sol_sec_kep_list = []
+    for j in range(sec_sol_eq.y.shape[1]):
+        equinoctial_state = sec_sol_eq.y[:, j]
+        keplerian_state = vc.equinox2kep(equinoctial_state)
+        sol_sec_kep_list.append(keplerian_state)
+
+    return {"t": sec_sol_eq.t, "keplerian": sol_sec_kep_list, "equinox": sec_sol_eq}
+
+
+def propagate_equinoctial(y0, t_span, **options):
+    """
+    Legacy function: Propagates the state vector y0 over the time span t_span using the VF function.
+
+    This function maintains backward compatibility with the original interface.
+    For new code, consider using the propagate() function which accepts Keplerian elements directly.
+
+    Args:
+        y0: Initial state vector [a, h, k, p, q, lM] in equinoctial coordinates.
         t_span: Tuple (t_start, t_end) specifying the integration interval.
         **options: Additional keyword arguments passed to scipy.integrate.solve_ivp.
 
