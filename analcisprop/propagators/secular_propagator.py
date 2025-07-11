@@ -69,7 +69,7 @@ def VF(t, y):
     return out
 
 
-def propagate(kep_elements, tmax, t_eval=None, **options):
+def propagate(kep_elements, tmax, dt, **options):
     """
     Propagates Keplerian orbital elements using the secular propagator.
 
@@ -82,8 +82,7 @@ def propagate(kep_elements, tmax, t_eval=None, **options):
                      - om: argument of periapsis (rad)
                      - M: mean anomaly (rad)
         tmax: Maximum integration time (s)
-        t_eval: Time points at which to evaluate the solution. If None,
-                creates a grid with 1000 points from 0 to tmax.
+        dt: Time step for the output grid (s)
         **options: Additional keyword arguments passed to scipy.integrate.solve_ivp.
 
     Returns:
@@ -102,9 +101,8 @@ def propagate(kep_elements, tmax, t_eval=None, **options):
     # Update defaults with user-provided options
     solver_options = {**default_options, **options}
 
-    # Create time grid if not provided
-    if t_eval is None:
-        t_eval = np.linspace(0, tmax, 1000)
+    # Create time grid using dt as step size
+    t_eval = np.arange(0, tmax + dt, dt)
 
     solver_options["t_eval"] = t_eval
 
