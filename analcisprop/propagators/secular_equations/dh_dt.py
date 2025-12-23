@@ -1,5 +1,4 @@
 import numpy as np
-from numba import njit
 
 #@njit
 def dh_dt(akm, OM, n, ecc, sih, cih, eta, lw, xE, yE, zE, rE):
